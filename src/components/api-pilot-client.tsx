@@ -1,3 +1,4 @@
+
 "use client";
 
 import { suggestTestPlan, SuggestTestPlanOutput } from "@/ai/flows/suggest-test-plan";
@@ -68,9 +69,9 @@ const stepsConfig = [
 type TestPlanState = SuggestTestPlanOutput['suggestedTests'];
 
 const parseThreshold = (threshold: string): { value: number, unit: string, operator: string } => {
-    const match = threshold.match(/([<>]?=?)\s*(\d+)\s*(.*)/);
+    const match = threshold.match(/([<>]?=?)\s*(\d+(\.\d+)?)\s*(.*)/);
     if (match) {
-        return { operator: match[1] || '<', value: parseInt(match[2]), unit: match[3] || '' };
+        return { operator: match[1] || '<', value: parseFloat(match[2]), unit: match[4] || '' };
     }
     return { operator: '<', value: 0, unit: '' };
 };
@@ -146,25 +147,27 @@ export default function ApiPilotClient() {
   };
 
   const handleTestPlanChange = (field: string, value: string) => {
-    const newTestPlan = testPlan.map(t => {
-      if (t.name === testConfig.testType) {
-        return { ...t, [field]: value };
-      }
-      return t;
-    });
-    setTestPlan(newTestPlan);
+    setTestPlan(currentPlan =>
+        currentPlan.map(t => {
+            if (t.name === testConfig.testType) {
+                return { ...t, [field]: value };
+            }
+            return t;
+        })
+    );
   };
   
   const handleMetricChange = (metricIndex: number, field: string, value: any) => {
-    const newTestPlan = testPlan.map(t => {
-      if (t.name === testConfig.testType) {
-        const newMetrics = [...t.metrics];
-        (newMetrics[metricIndex] as any)[field] = value;
-        return { ...t, metrics: newMetrics };
-      }
-      return t;
-    });
-    setTestPlan(newTestPlan);
+    setTestPlan(currentPlan =>
+        currentPlan.map(t => {
+            if (t.name === testConfig.testType) {
+                const newMetrics = [...t.metrics];
+                (newMetrics[metricIndex] as any)[field] = value;
+                return { ...t, metrics: newMetrics };
+            }
+            return t;
+        })
+    );
   };
 
   const handleGenerateScript = async () => {
@@ -346,7 +349,7 @@ export default function ApiPilotClient() {
               <div className="space-y-2">
                 <Label>AI-Suggested Test Plan & SLI/SLOs</Label>
                 {activeTestPlan && (
-                  <Accordion type="single" collapsible defaultValue={activeTestPlan.name} className="w-full">
+                  <Accordion type="single" collapsible value={activeTestPlan.name} onValueChange={() => {}} className="w-full">
                       <AccordionItem value={activeTestPlan.name}>
                         <AccordionTrigger className="text-base font-semibold">{activeTestPlan.name}</AccordionTrigger>
                         <AccordionContent className="space-y-4 pl-2">
@@ -392,7 +395,7 @@ export default function ApiPilotClient() {
                                         value={[parsed.value]}
                                         onValueChange={([val]) => handleMetricChange(metricIndex, "threshold", formatThreshold(parsed.operator, val, parsed.unit))}
                                         max={max}
-                                        step={1}
+                                        step={parsed.unit === '%' ? 1 : 10}
                                     />
                                   </div>
                                 </div>
@@ -600,3 +603,5 @@ export default function ApiPilotClient() {
     </div>
   );
 }
+
+    
