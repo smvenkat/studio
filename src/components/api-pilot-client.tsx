@@ -50,6 +50,7 @@ import { Separator } from "@/components/ui/separator";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { ChartContainer } from "@/components/ui/chart";
 import { Progress } from "@/components/ui/progress";
+import { Slider } from "@/components/ui/slider";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import React, { useState, useMemo, useEffect, useRef } from "react";
@@ -65,6 +66,18 @@ const stepsConfig = [
 ];
 
 type TestPlanState = SuggestTestPlanOutput['suggestedTests'];
+
+const parseThreshold = (threshold: string): { value: number, unit: string, operator: string } => {
+    const match = threshold.match(/([<>]?=?)\s*(\d+)\s*(.*)/);
+    if (match) {
+        return { operator: match[1] || '<', value: parseInt(match[2]), unit: match[3] || '' };
+    }
+    return { operator: '<', value: 0, unit: '' };
+};
+
+const formatThreshold = (operator: string, value: number, unit: string) => {
+    return `${operator} ${value}${unit}`;
+};
 
 export default function ApiPilotClient() {
   const [step, setStep] = useState<Step>("upload");
@@ -89,6 +102,8 @@ export default function ApiPilotClient() {
 
   const currentStepIndex = useMemo(() => stepsConfig.findIndex((s) => s.id === step), [step]);
 
+  const activeTestPlan = useMemo(() => testPlan.find(t => t.name === testConfig.testType), [testPlan, testConfig.testType]);
+  
   useEffect(() => {
     if (step === "results" && isTestRunning) {
       setTimeElapsed(0);
@@ -118,6 +133,9 @@ export default function ApiPilotClient() {
     try {
       const result = await suggestTestPlan({ swaggerFileContent: swaggerContent });
       setTestPlan(result.suggestedTests);
+      if (result.suggestedTests.length > 0 && !result.suggestedTests.some(t => t.name === testConfig.testType)) {
+        setTestConfig(c => ({...c, testType: result.suggestedTests[0].name}));
+      }
       setStep("plan");
     } catch (e) {
       setError(`Failed to analyze API. Please check the Swagger/OpenAPI spec and try again. Error: ${e}`);
@@ -127,15 +145,25 @@ export default function ApiPilotClient() {
     }
   };
 
-  const handleTestPlanChange = (testIndex: number, field: string, value: string) => {
-    const newTestPlan = [...testPlan];
-    (newTestPlan[testIndex] as any)[field] = value;
+  const handleTestPlanChange = (field: string, value: string) => {
+    const newTestPlan = testPlan.map(t => {
+      if (t.name === testConfig.testType) {
+        return { ...t, [field]: value };
+      }
+      return t;
+    });
     setTestPlan(newTestPlan);
   };
   
-  const handleMetricChange = (testIndex: number, metricIndex: number, field: string, value: string) => {
-    const newTestPlan = [...testPlan];
-    (newTestPlan[testIndex].metrics[metricIndex] as any)[field] = value;
+  const handleMetricChange = (metricIndex: number, field: string, value: any) => {
+    const newTestPlan = testPlan.map(t => {
+      if (t.name === testConfig.testType) {
+        const newMetrics = [...t.metrics];
+        (newMetrics[metricIndex] as any)[field] = value;
+        return { ...t, metrics: newMetrics };
+      }
+      return t;
+    });
     setTestPlan(newTestPlan);
   };
 
@@ -143,7 +171,7 @@ export default function ApiPilotClient() {
     setIsLoading(true);
     setError(null);
     try {
-      const customizedTestPlanString = JSON.stringify(testPlan, null, 2);
+      const customizedTestPlanString = JSON.stringify(activeTestPlan ? [activeTestPlan] : [], null, 2);
       const fullTestPlan = `Environment: ${testConfig.environment}\nTest Type: ${testConfig.testType}\n\n${customizedTestPlanString}`;
       const result = await generateK6Script({
         apiDefinition: swaggerContent,
@@ -309,10 +337,7 @@ export default function ApiPilotClient() {
                   <Select value={testConfig.testType} onValueChange={(v) => setTestConfig(c => ({...c, testType: v}))}>
                     <SelectTrigger id="testType"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="Load Test">Load Test</SelectItem>
-                      <SelectItem value="Stress Test">Stress Test</SelectItem>
-                      <SelectItem value="Spike Test">Spike Test</SelectItem>
-                      <SelectItem value="Soak Test">Soak Test</SelectItem>
+                      {testPlan.map(t => <SelectItem key={t.name} value={t.name}>{t.name}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
@@ -320,59 +345,64 @@ export default function ApiPilotClient() {
               <Separator />
               <div className="space-y-2">
                 <Label>AI-Suggested Test Plan & SLI/SLOs</Label>
-                <Accordion type="multiple" defaultValue={testPlan.map(t => t.name)} className="w-full">
-                  {testPlan.map((test, testIndex) => (
-                    <AccordionItem value={test.name} key={testIndex}>
-                      <AccordionTrigger className="text-base font-semibold">{test.name}</AccordionTrigger>
-                      <AccordionContent className="space-y-4 pl-2">
-                        <div className="space-y-1">
-                          <Label htmlFor={`test-desc-${testIndex}`}>Description</Label>
-                          <Textarea
-                            id={`test-desc-${testIndex}`}
-                            value={test.description}
-                            onChange={(e) => handleTestPlanChange(testIndex, "description", e.target.value)}
-                            className="text-xs"
-                          />
-                        </div>
+                {activeTestPlan && (
+                  <Accordion type="single" collapsible defaultValue={activeTestPlan.name} className="w-full">
+                      <AccordionItem value={activeTestPlan.name}>
+                        <AccordionTrigger className="text-base font-semibold">{activeTestPlan.name}</AccordionTrigger>
+                        <AccordionContent className="space-y-4 pl-2">
+                          <div className="space-y-1">
+                            <Label htmlFor={`test-desc`}>Description</Label>
+                            <Textarea
+                              id={`test-desc`}
+                              value={activeTestPlan.description}
+                              onChange={(e) => handleTestPlanChange("description", e.target.value)}
+                              className="text-xs"
+                            />
+                          </div>
 
-                        <Label className="font-medium">Metrics</Label>
-                        <div className="space-y-3 rounded-md border p-4">
-                          {test.metrics.map((metric, metricIndex) => (
-                            <div key={metricIndex} className="grid grid-cols-1 gap-4 md:grid-cols-3">
-                              <div className="space-y-1">
-                                <Label htmlFor={`metric-name-${testIndex}-${metricIndex}`} className="text-xs">Name</Label>
-                                <Input
-                                  id={`metric-name-${testIndex}-${metricIndex}`}
-                                  value={metric.name}
-                                  onChange={(e) => handleMetricChange(testIndex, metricIndex, "name", e.target.value)}
-                                  className="text-xs"
-                                />
-                              </div>
-                              <div className="space-y-1">
-                                <Label htmlFor={`metric-threshold-${testIndex}-${metricIndex}`} className="text-xs">Threshold</Label>
-                                <Input
-                                  id={`metric-threshold-${testIndex}-${metricIndex}`}
-                                  value={metric.threshold}
-                                  onChange={(e) => handleMetricChange(testIndex, metricIndex, "threshold", e.target.value)}
-                                  className="text-xs"
-                                />
-                              </div>
-                              <div className="space-y-1">
-                                <Label htmlFor={`metric-desc-${testIndex}-${metricIndex}`} className="text-xs">Description</Label>
-                                <Input
-                                  id={`metric-desc-${testIndex}-${metricIndex}`}
-                                  value={metric.description}
-                                  onChange={(e) => handleMetricChange(testIndex, metricIndex, "description", e.target.value)}
-                                  className="text-xs"
-                                />
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </AccordionContent>
-                    </AccordionItem>
-                  ))}
-                </Accordion>
+                          <Label className="font-medium">Metrics</Label>
+                          <div className="space-y-6 rounded-md border p-4">
+                            {activeTestPlan.metrics.map((metric, metricIndex) => {
+                               const parsed = parseThreshold(metric.threshold);
+                               const max = parsed.unit === '%' ? 100 : (parsed.value > 500 ? parsed.value * 2 : 1000);
+                              return (
+                                <div key={metricIndex} className="grid grid-cols-1 gap-x-6 gap-y-4 md:grid-cols-2">
+                                  <div className="space-y-1">
+                                    <Label htmlFor={`metric-name-${metricIndex}`} className="text-xs">Name</Label>
+                                    <Input
+                                      id={`metric-name-${metricIndex}`}
+                                      value={metric.name}
+                                      onChange={(e) => handleMetricChange(metricIndex, "name", e.target.value)}
+                                      className="text-xs"
+                                    />
+                                  </div>
+                                  <div className="space-y-1">
+                                      <Label htmlFor={`metric-desc-${metricIndex}`} className="text-xs">Description</Label>
+                                      <Input
+                                          id={`metric-desc-${metricIndex}`}
+                                          value={metric.description}
+                                          onChange={(e) => handleMetricChange(metricIndex, "description", e.target.value)}
+                                          className="text-xs"
+                                      />
+                                  </div>
+                                  <div className="space-y-1 md:col-span-2">
+                                    <Label htmlFor={`metric-threshold-${metricIndex}`} className="text-xs">Threshold: <span className="font-mono text-primary">{metric.threshold}</span></Label>
+                                    <Slider
+                                        id={`metric-threshold-${metricIndex}`}
+                                        value={[parsed.value]}
+                                        onValueChange={([val]) => handleMetricChange(metricIndex, "threshold", formatThreshold(parsed.operator, val, parsed.unit))}
+                                        max={max}
+                                        step={1}
+                                    />
+                                  </div>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        </AccordionContent>
+                      </AccordionItem>
+                  </Accordion>
+                )}
               </div>
             </CardContent>
         );
@@ -491,7 +521,7 @@ export default function ApiPilotClient() {
             {step === "plan" && (
                 <div className="flex gap-2">
                     <Button variant="outline" onClick={() => setStep("upload")}>Back</Button>
-                    <Button onClick={handleGenerateScript} disabled={testPlan.length === 0 || isLoading}>
+                    <Button onClick={handleGenerateScript} disabled={!activeTestPlan || isLoading}>
                         {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ArrowRight className="mr-2 h-4 w-4" />}
                         Generate Script
                     </Button>
