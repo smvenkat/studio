@@ -1,7 +1,5 @@
 import type {NextConfig} from 'next';
 
-require('dotenv').config();
-
 const nextConfig: NextConfig = {
   /* config options here */
   typescript: {
@@ -19,6 +17,9 @@ const nextConfig: NextConfig = {
         pathname: '/**',
       },
     ],
+  },
+  env: {
+    GEMINI_API_KEY: process.env.GEMINI_API_KEY,
   },
 };
 
