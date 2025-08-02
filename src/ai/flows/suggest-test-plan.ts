@@ -18,9 +18,22 @@ const SuggestTestPlanInputSchema = z.object({
 });
 export type SuggestTestPlanInput = z.infer<typeof SuggestTestPlanInputSchema>;
 
+const TestMetricSchema = z.object({
+  name: z.string().describe('The name of the SLI/SLO metric (e.g., "p95 latency", "error rate").'),
+  threshold: z.string().describe('The target threshold for the metric (e.g., "< 200ms", "< 1%").'),
+  description: z.string().describe('A brief description or rationale for this metric.'),
+});
+
+const TestTypeSchema = z.object({
+  name: z.string().describe('The type of performance test (e.g., "Load Test", "Stress Test").'),
+  description: z.string().describe('A brief description of this test type and its purpose for this API.'),
+  metrics: z.array(TestMetricSchema).describe('A list of SLI/SLO metrics for this test type.'),
+});
+
+
 const SuggestTestPlanOutputSchema = z.object({
-  suggestedTestPlan: z.string().describe(
-    'A suggestion for a performance test plan, including test types and SLI/SLO metrics.'
+  suggestedTests: z.array(TestTypeSchema).describe(
+    'An array of suggested performance tests with SLI/SLO metrics.'
   ),
 });
 export type SuggestTestPlanOutput = z.infer<typeof SuggestTestPlanOutputSchema>;
@@ -35,7 +48,7 @@ const prompt = ai.definePrompt({
   output: {schema: SuggestTestPlanOutputSchema},
   prompt: `You are an expert performance testing consultant.
 
-  Based on the provided Swagger/OpenAPI file content, suggest a suitable performance test plan.  Include specific testing types (e.g., stress, load, soak, spike) and relevant SLI/SLO metrics for each test type.
+  Based on the provided Swagger/OpenAPI file content, suggest a suitable performance test plan.  Include specific testing types (e.g., stress, load, soak, spike) and relevant SLI/SLO metrics for each test type. The output should be a structured JSON object.
 
   Swagger File Content:
   {{swaggerFileContent}}`,

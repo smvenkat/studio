@@ -1,7 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useEffect, useRef } from "react";
-import { suggestTestPlan } from "@/ai/flows/suggest-test-plan";
+import { suggestTestPlan, SuggestTestPlanOutput } from "@/ai/flows/suggest-test-plan";
 import { generateK6Script } from "@/ai/flows/generate-k6-script";
 import { zipArtifacts } from "@/ai/flows/zip-artifacts";
 import { Button } from "@/components/ui/button";
@@ -24,6 +23,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
+import {
   Loader2,
   Download,
   Users,
@@ -38,14 +43,16 @@ import {
   ArrowRight,
   RefreshCw,
   Archive,
+  Trash2,
 } from "lucide-react";
 import { ApiPilotLogo } from "@/components/icons";
 import { Separator } from "@/components/ui/separator";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
+import { ChartContainer } from "@/components/ui/chart";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 
 
 type Step = "upload" | "plan" | "script" | "results";
@@ -57,11 +64,12 @@ const stepsConfig = [
   { id: "results", name: "Execute & Report", icon: CheckCircle },
 ];
 
+type TestPlanState = SuggestTestPlanOutput['suggestedTests'];
+
 export default function ApiPilotClient() {
   const [step, setStep] = useState<Step>("upload");
   const [swaggerContent, setSwaggerContent] = useState("");
-  const [suggestedTestPlan, setSuggestedTestPlan] = useState("");
-  const [customizedTestPlan, setCustomizedTestPlan] = useState("");
+  const [testPlan, setTestPlan] = useState<TestPlanState>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [k6Script, setK6Script] = useState("");
@@ -107,25 +115,36 @@ export default function ApiPilotClient() {
   const handleAnalyze = async () => {
     setIsLoading(true);
     setError(null);
- console.log("Swagger Content:", swaggerContent);
     try {
       const result = await suggestTestPlan({ swaggerFileContent: swaggerContent });
-      setSuggestedTestPlan(result.suggestedTestPlan);
-      setCustomizedTestPlan(result.suggestedTestPlan);
+      setTestPlan(result.suggestedTests);
       setStep("plan");
     } catch (e) {
- setError(`Failed to analyze API. Please check the Swagger/OpenAPI spec and try again. Error: ${e}`);
+      setError(`Failed to analyze API. Please check the Swagger/OpenAPI spec and try again. Error: ${e}`);
       toast({ title: "Analysis Failed", description: `Could not analyze the provided API specification. Error: ${e}`, variant: "destructive" });
     } finally {
       setIsLoading(false);
     }
   };
 
+  const handleTestPlanChange = (testIndex: number, field: string, value: string) => {
+    const newTestPlan = [...testPlan];
+    (newTestPlan[testIndex] as any)[field] = value;
+    setTestPlan(newTestPlan);
+  };
+  
+  const handleMetricChange = (testIndex: number, metricIndex: number, field: string, value: string) => {
+    const newTestPlan = [...testPlan];
+    (newTestPlan[testIndex].metrics[metricIndex] as any)[field] = value;
+    setTestPlan(newTestPlan);
+  };
+
   const handleGenerateScript = async () => {
     setIsLoading(true);
     setError(null);
     try {
-      const fullTestPlan = `Environment: ${testConfig.environment}\nTest Type: ${testConfig.testType}\n\n${customizedTestPlan}`;
+      const customizedTestPlanString = JSON.stringify(testPlan, null, 2);
+      const fullTestPlan = `Environment: ${testConfig.environment}\nTest Type: ${testConfig.testType}\n\n${customizedTestPlanString}`;
       const result = await generateK6Script({
         apiDefinition: swaggerContent,
         testPlan: fullTestPlan
@@ -196,8 +215,7 @@ export default function ApiPilotClient() {
   const handleStartNewTest = () => {
     setStep('upload');
     setSwaggerContent('');
-    setSuggestedTestPlan('');
-    setCustomizedTestPlan('');
+    setTestPlan([]);
     setK6Script('');
     setError(null);
     setIsTestRunning(false);
@@ -273,42 +291,90 @@ export default function ApiPilotClient() {
         );
       case "plan":
         return (
-          <CardContent className="space-y-6 pt-6">
-            <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="environment">Environment</Label>
-                <Select value={testConfig.environment} onValueChange={(v) => setTestConfig(c => ({...c, environment: v}))}>
-                  <SelectTrigger id="environment"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="development">Development</SelectItem>
-                    <SelectItem value="staging">Staging</SelectItem>
-                    <SelectItem value="production">Production</SelectItem>
-                  </SelectContent>
-                </Select>
+            <CardContent className="space-y-6 pt-6">
+              <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="environment">Environment</Label>
+                  <Select value={testConfig.environment} onValueChange={(v) => setTestConfig(c => ({...c, environment: v}))}>
+                    <SelectTrigger id="environment"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="development">Development</SelectItem>
+                      <SelectItem value="staging">Staging</SelectItem>
+                      <SelectItem value="production">Production</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="testType">Global Test Type</Label>
+                  <Select value={testConfig.testType} onValueChange={(v) => setTestConfig(c => ({...c, testType: v}))}>
+                    <SelectTrigger id="testType"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Load Test">Load Test</SelectItem>
+                      <SelectItem value="Stress Test">Stress Test</SelectItem>
+                      <SelectItem value="Spike Test">Spike Test</SelectItem>
+                      <SelectItem value="Soak Test">Soak Test</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
+              <Separator />
               <div className="space-y-2">
-                <Label htmlFor="testType">Test Type</Label>
-                <Select value={testConfig.testType} onValueChange={(v) => setTestConfig(c => ({...c, testType: v}))}>
-                  <SelectTrigger id="testType"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Load Test">Load Test</SelectItem>
-                    <SelectItem value="Stress Test">Stress Test</SelectItem>
-                    <SelectItem value="Spike Test">Spike Test</SelectItem>
-                    <SelectItem value="Soak Test">Soak Test</SelectItem>
-                  </SelectContent>
-                </Select>
+                <Label>AI-Suggested Test Plan & SLI/SLOs</Label>
+                <Accordion type="multiple" defaultValue={testPlan.map(t => t.name)} className="w-full">
+                  {testPlan.map((test, testIndex) => (
+                    <AccordionItem value={test.name} key={testIndex}>
+                      <AccordionTrigger className="text-base font-semibold">{test.name}</AccordionTrigger>
+                      <AccordionContent className="space-y-4 pl-2">
+                        <div className="space-y-1">
+                          <Label htmlFor={`test-desc-${testIndex}`}>Description</Label>
+                          <Textarea
+                            id={`test-desc-${testIndex}`}
+                            value={test.description}
+                            onChange={(e) => handleTestPlanChange(testIndex, "description", e.target.value)}
+                            className="text-xs"
+                          />
+                        </div>
+
+                        <Label className="font-medium">Metrics</Label>
+                        <div className="space-y-3 rounded-md border p-4">
+                          {test.metrics.map((metric, metricIndex) => (
+                            <div key={metricIndex} className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                              <div className="space-y-1">
+                                <Label htmlFor={`metric-name-${testIndex}-${metricIndex}`} className="text-xs">Name</Label>
+                                <Input
+                                  id={`metric-name-${testIndex}-${metricIndex}`}
+                                  value={metric.name}
+                                  onChange={(e) => handleMetricChange(testIndex, metricIndex, "name", e.target.value)}
+                                  className="text-xs"
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <Label htmlFor={`metric-threshold-${testIndex}-${metricIndex}`} className="text-xs">Threshold</Label>
+                                <Input
+                                  id={`metric-threshold-${testIndex}-${metricIndex}`}
+                                  value={metric.threshold}
+                                  onChange={(e) => handleMetricChange(testIndex, metricIndex, "threshold", e.target.value)}
+                                  className="text-xs"
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <Label htmlFor={`metric-desc-${testIndex}-${metricIndex}`} className="text-xs">Description</Label>
+                                <Input
+                                  id={`metric-desc-${testIndex}-${metricIndex}`}
+                                  value={metric.description}
+                                  onChange={(e) => handleMetricChange(testIndex, metricIndex, "description", e.target.value)}
+                                  className="text-xs"
+                                />
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </AccordionContent>
+                    </AccordionItem>
+                  ))}
+                </Accordion>
               </div>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="test-plan">AI-Suggested Test Plan & SLI/SLOs</Label>
-              <Textarea
-                id="test-plan"
-                value={customizedTestPlan}
-                onChange={(e) => setCustomizedTestPlan(e.target.value)}
-                className="h-72 font-mono text-xs"
-              />
-            </div>
-          </CardContent>
+            </CardContent>
         );
       case "script":
         return (
@@ -425,7 +491,7 @@ export default function ApiPilotClient() {
             {step === "plan" && (
                 <div className="flex gap-2">
                     <Button variant="outline" onClick={() => setStep("upload")}>Back</Button>
-                    <Button onClick={handleGenerateScript} disabled={!customizedTestPlan || isLoading}>
+                    <Button onClick={handleGenerateScript} disabled={testPlan.length === 0 || isLoading}>
                         {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ArrowRight className="mr-2 h-4 w-4" />}
                         Generate Script
                     </Button>
