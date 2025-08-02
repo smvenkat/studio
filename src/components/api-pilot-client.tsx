@@ -3,6 +3,7 @@
 import React, { useState, useMemo, useEffect, useRef } from "react";
 import { suggestTestPlan } from "@/ai/flows/suggest-test-plan";
 import { generateK6Script } from "@/ai/flows/generate-k6-script";
+import { zipArtifacts } from "@/ai/flows/zip-artifacts";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -35,7 +36,8 @@ import {
   CheckCircle,
   ClipboardCopy,
   ArrowRight,
-  RefreshCw
+  RefreshCw,
+  Archive,
 } from "lucide-react";
 import { ApiPilotLogo } from "@/components/icons";
 import { Separator } from "@/components/ui/separator";
@@ -153,6 +155,36 @@ export default function ApiPilotClient() {
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
     toast({ title: "Download Started", description: `${filename} is downloading.` });
+  };
+  
+  const handleDownloadArchive = async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const result = await zipArtifacts({
+        files: [
+          { name: 'k6-script.js', content: k6Script },
+          { name: 'test-report.json', content: JSON.stringify(chartData, null, 2) },
+        ],
+      });
+      
+      const blob = new Blob([Buffer.from(result.zipAsBase64, 'base64')], { type: 'application/zip' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = 'api-pilot-artifacts.zip';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast({ title: "Download Started", description: `api-pilot-artifacts.zip is downloading.` });
+
+    } catch (e) {
+      setError("Failed to create zip archive.");
+      toast({ title: "Archive Failed", description: "Could not create the zip archive.", variant: "destructive" });
+    } finally {
+      setIsLoading(false);
+    }
   };
   
   const handleCopyToClipboard = (text: string) => {
@@ -423,8 +455,9 @@ export default function ApiPilotClient() {
                       </div>
                     )}
                     <div className="flex gap-2">
-                        <Button variant="secondary" onClick={() => handleDownload(JSON.stringify(chartData, null, 2), 'test-report.json', 'application/json')} disabled={isTestRunning}>
-                            <Download className="mr-2 h-4 w-4" /> Download Report
+                        <Button variant="secondary" onClick={handleDownloadArchive} disabled={isTestRunning || isLoading}>
+                            {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Archive className="mr-2 h-4 w-4" />}
+                             Download Archive
                         </Button>
                         <Button onClick={handleStartNewTest} disabled={isTestRunning}>
                             <RefreshCw className="mr-2 h-4 w-4" /> New Test
