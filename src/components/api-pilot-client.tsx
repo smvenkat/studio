@@ -107,14 +107,15 @@ export default function ApiPilotClient() {
   const handleAnalyze = async () => {
     setIsLoading(true);
     setError(null);
+ console.log("Swagger Content:", swaggerContent);
     try {
       const result = await suggestTestPlan({ swaggerFileContent: swaggerContent });
       setSuggestedTestPlan(result.suggestedTestPlan);
       setCustomizedTestPlan(result.suggestedTestPlan);
       setStep("plan");
     } catch (e) {
-      setError("Failed to analyze API. Please check the Swagger/OpenAPI spec and try again.");
-      toast({ title: "Analysis Failed", description: "Could not analyze the provided API specification.", variant: "destructive" });
+ setError(`Failed to analyze API. Please check the Swagger/OpenAPI spec and try again. Error: ${e}`);
+      toast({ title: "Analysis Failed", description: `Could not analyze the provided API specification. Error: ${e}`, variant: "destructive" });
     } finally {
       setIsLoading(false);
     }
