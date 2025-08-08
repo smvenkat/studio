@@ -1,6 +1,6 @@
-# API Pilot
+# LoadCraft K6
 
-API Pilot is a web-based application designed to streamline performance testing by leveraging generative AI. It allows users to upload an API specification (Swagger/OpenAPI), receive an AI-generated test plan, customize it, and generate a ready-to-use k6 performance test script.
+LoadCraft K6 is a web-based application designed to streamline performance testing by leveraging generative AI. It allows users to upload an API specification (Swagger/OpenAPI), receive an AI-generated test plan, customize it, and generate a ready-to-use k6 performance test script.
 
 ## Application Flow
 

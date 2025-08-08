@@ -349,7 +349,7 @@ export default function LoadCraftK6Client() {
               <div className="space-y-2">
                 <Label>AI-Suggested Test Plan & SLI/SLOs</Label>
                 {activeTestPlan && (
-                  <Accordion type="single" collapsible value={activeTestPlan.name} onValueChange={() => {}} className="w-full">
+                  <Accordion type="single" collapsible defaultValue={activeTestPlan.name} value={activeTestPlan.name} className="w-full">
                       <AccordionItem value={activeTestPlan.name}>
                         <AccordionTrigger className="text-base font-semibold">{activeTestPlan.name}</AccordionTrigger>
                         <AccordionContent className="space-y-4 pl-2">

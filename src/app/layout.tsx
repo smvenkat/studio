@@ -3,7 +3,7 @@ import './globals.css';
 import { Toaster } from "@/components/ui/toaster"
 
 export const metadata: Metadata = {
-  title: 'API Pilot',
+  title: 'LoadCraft K6',
   description: 'Generate and run performance tests for your API.',
 };
 
